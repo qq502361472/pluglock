@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentMap;
 public class LockManager {
     
     private static final ConcurrentMap<String, LockFactory> lockFactories = new ConcurrentHashMap<>();
+    // 定义默认锁类型的优先级顺序
+    private static final String[] DEFAULT_LOCK_TYPE_PRIORITY = {"redis", "zookeeper", "jdbc"};
     
     static {
         loadLockFactories();
@@ -33,6 +35,22 @@ public class LockManager {
     }
     
     /**
+     * 自动获取锁工厂，根据预设的优先级顺序选择第一个可用的锁工厂
+     * 
+     * @return 锁工厂实例，如果没有可用的锁工厂则返回null
+     */
+    public static LockFactory getLockFactory() {
+        for (String type : DEFAULT_LOCK_TYPE_PRIORITY) {
+            LockFactory factory = lockFactories.get(type);
+            if (factory != null) {
+                return factory;
+            }
+        }
+        // 如果没有找到预设类型中的任何一个，则返回找到的第一个工厂（如果有的话）
+        return lockFactories.values().stream().findFirst().orElse(null);
+    }
+    
+    /**
      * 创建分布式锁
      * 
      * @param type 锁类型
@@ -44,6 +62,21 @@ public class LockManager {
         LockFactory factory = getLockFactory(type);
         if (factory == null) {
             throw new IllegalArgumentException("No lock factory found for type: " + type);
+        }
+        return factory.createLock(name, config);
+    }
+    
+    /**
+     * 创建分布式锁，自动选择可用的锁工厂
+     * 
+     * @param name 锁名称
+     * @param config 锁配置
+     * @return 分布式锁实例
+     */
+    public static PLock createLock(String name, LockConfig config) {
+        LockFactory factory = getLockFactory();
+        if (factory == null) {
+            throw new IllegalStateException("No lock factory available");
         }
         return factory.createLock(name, config);
     }

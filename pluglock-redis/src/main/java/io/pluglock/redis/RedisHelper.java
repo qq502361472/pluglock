@@ -1,19 +1,12 @@
-package io.pluglock.core;
+package io.pluglock.redis;
+
+import io.pluglock.core.StorageCallback;
+import io.pluglock.core.StorageOperation;
 
 /**
- * Redis操作助手接口，用于简化Redis操作
+ * Redis操作助手接口，定义了Redis操作的基本方法
  */
-public interface RedisHelper {
-    
-    /**
-     * 执行Redis操作
-     * 
-     * @param callback Redis操作回调
-     * @param <T> Redis客户端连接类型
-     * @param <R> 返回值类型
-     * @return 操作结果
-     */
-    <T, R> R execute(RedisCallback<T, R> callback);
+public interface RedisHelper extends StorageOperation<Object> {
     
     /**
      * 尝试获取锁
@@ -38,7 +31,7 @@ public interface RedisHelper {
      * 检查锁是否被占用
      * 
      * @param key 锁的键名
-     * @return 是否被占用
+     * @return 锁是否被占用
      */
     boolean isLocked(String key);
 }

@@ -7,7 +7,7 @@ import java.util.concurrent.locks.Condition;
 /**
  * 可重入锁抽象基类
  */
-public abstract class AbstractPReentrantPLock extends AbstractPLock {
+public abstract class AbstractPReentrantLock extends AbstractPLock {
     
     private final ThreadLocal<Integer> lockCount = new ThreadLocal<Integer>() {
         @Override
@@ -18,7 +18,7 @@ public abstract class AbstractPReentrantPLock extends AbstractPLock {
     
     protected static final ConcurrentHashMap<String, String> LOCK_HOLDER = new ConcurrentHashMap<>();
     
-    public AbstractPReentrantPLock(String lockName) {
+    public AbstractPReentrantLock(String lockName) {
         super(lockName);
     }
     

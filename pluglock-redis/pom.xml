@@ -25,5 +25,19 @@
             <artifactId>pluglock-core</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+        
+        <!-- Jedis dependency for Redis connections -->
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>3.7.0</version>
+        </dependency>
+        
+        <!-- Lettuce dependency for Redis connections -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>6.1.5.RELEASE</version>
+        </dependency>
     </dependencies>
 </project>

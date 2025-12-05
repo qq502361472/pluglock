@@ -2,12 +2,11 @@ package io.pluglock.redis;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
 
 /**
- * Lettuce连接工厂
+ * Lettuce连接工厂实现
  */
-public class LettuceConnectionFactory {
+public class LettuceConnectionFactory implements RedisConnectionFactory {
     
     private final RedisClient redisClient;
     private final String redisUri;
@@ -17,23 +16,27 @@ public class LettuceConnectionFactory {
         this.redisClient = RedisClient.create(this.redisUri);
     }
     
-    public StatefulRedisConnection<String, String> getConnection() {
-        return redisClient.connect();
+    @Override
+    public RedisConnection<StatefulRedisConnection<String, String>> getConnection() {
+        return new LettuceConnection(redisClient.connect());
     }
     
-    public RedisCommands<String, String> getSyncCommands() {
-        return redisClient.connect().sync();
-    }
-    
-    public void releaseConnection(StatefulRedisConnection<String, String> connection) {
-        if (connection != null) {
+    @Override
+    public void releaseConnection(RedisConnection<?> connection) {
+        if (connection instanceof LettuceConnection) {
             connection.close();
         }
     }
     
+    @Override
     public void destroy() {
         if (redisClient != null) {
             redisClient.shutdown();
         }
+    }
+    
+    @Override
+    public String getName() {
+        return "lettuce";
     }
 }

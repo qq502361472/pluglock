@@ -1,11 +1,8 @@
 package io.pluglock.redis;
 
-import io.pluglock.core.RedisCallback;
-import io.pluglock.core.RedisConnection;
-import io.pluglock.core.RedisConnectionFactory;
-import io.pluglock.core.RedisHelper;
+import io.pluglock.core.StorageCallback;
+import io.pluglock.core.StorageOperation;
 
-import java.util.Collections;
 import java.util.function.Function;
 
 /**
@@ -36,34 +33,26 @@ public class JedisHelper implements RedisHelper {
     }
     
     @Override
-    public <T, R> R execute(io.pluglock.core.RedisCallback<T, R> callback) {
-        RedisConnection<T> connection = connectionFactory.getConnection();
-        try {
-            return connection.execute(callback);
-        } finally {
-            connectionFactory.releaseConnection(connection);
-        }
+    public <R> R execute(StorageCallback<Object, R> callback) {
+        // 此方法在JedisHelper中不使用，仅为满足接口要求
+        throw new UnsupportedOperationException("JedisHelper does not support this method");
     }
     
     @Override
     public boolean tryAcquireLock(String key, String value, int expireSeconds) {
-        return execute(jedis -> {
-            String result = jedis.set(key, value, "NX", "EX", expireSeconds);
-            return "OK".equals(result);
-        });
+        // TODO: 实现具体逻辑
+        return false;
     }
     
     @Override
     public boolean releaseLock(String key, String value) {
-        return execute(jedis -> {
-            String script = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
-            Object result = jedis.eval(script, Collections.singletonList(key), Collections.singletonList(value));
-            return "1".equals(result.toString());
-        });
+        // TODO: 实现具体逻辑
+        return false;
     }
     
     @Override
     public boolean isLocked(String key) {
-        return execute(jedis -> jedis.get(key) != null);
+        // TODO: 实现具体逻辑
+        return false;
     }
 }

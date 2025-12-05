@@ -5,9 +5,9 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 /**
- * Jedis连接工厂
+ * Jedis连接工厂实现
  */
-public class JedisConnectionFactory {
+public class JedisConnectionFactory implements RedisConnectionFactory {
     
     private JedisPool jedisPool;
     
@@ -19,19 +19,27 @@ public class JedisConnectionFactory {
         this.jedisPool = new JedisPool(poolConfig, host, port, timeout);
     }
     
-    public Jedis getConnection() {
-        return jedisPool.getResource();
+    @Override
+    public RedisConnection<Jedis> getConnection() {
+        return new JedisConnection(jedisPool.getResource());
     }
     
-    public void releaseConnection(Jedis jedis) {
-        if (jedis != null) {
-            jedis.close();
+    @Override
+    public void releaseConnection(RedisConnection<?> connection) {
+        if (connection instanceof JedisConnection) {
+            connection.close();
         }
     }
     
+    @Override
     public void destroy() {
         if (jedisPool != null) {
             jedisPool.close();
         }
+    }
+    
+    @Override
+    public String getName() {
+        return "jedis";
     }
 }

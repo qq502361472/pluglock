@@ -6,11 +6,11 @@ import java.util.concurrent.locks.Condition;
 /**
  * 锁抽象基类，提供基础实现
  */
-public abstract class AbstractLock implements Lock {
+public abstract class AbstractPLock implements PLock {
     
     protected final String lockName;
     
-    public AbstractLock(String lockName) {
+    public AbstractPLock(String lockName) {
         this.lockName = lockName;
     }
     

@@ -1,5 +1,6 @@
 package io.pluglock.example.simple;
 
+import io.pluglock.core.DefaultLockManager;
 import io.pluglock.core.LockConfig;
 import io.pluglock.core.LockManager;
 import io.pluglock.core.PLock;
@@ -39,7 +40,7 @@ public class RedisExample {
 
         try {
             // 创建Redis锁
-            PLock lock = LockManager.createLock("redis", "redis-demo-lock", config);
+            PLock lock = DefaultLockManager.createLock("redis-demo-lock", config);
             System.out.println("创建Redis锁成功: " + lock.getName());
 
             // 创建线程池

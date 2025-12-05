@@ -1,7 +1,7 @@
 package io.pluglock.redis.spi;
 
-import io.pluglock.core.RedisConnectionFactory;
-import io.pluglock.core.RedisConnection;
+import io.pluglock.redis.RedisConnectionFactory;
+import io.pluglock.redis.RedisConnection;
 import io.pluglock.redis.LettuceConnection;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;

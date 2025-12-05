@@ -1,7 +1,10 @@
-package io.pluglock.core;
+package io.pluglock.redis;
+
+import io.pluglock.core.StorageCallback;
 
 /**
- * Redis连接接口，用于抽象不同的Redis客户端连接
+ * Redis连接接口
+ * 
  * @param <T> Redis客户端连接类型
  */
 public interface RedisConnection<T> {
@@ -13,7 +16,7 @@ public interface RedisConnection<T> {
      * @param <R> 返回值类型
      * @return 操作结果
      */
-    <R> R execute(RedisCallback<T, R> callback);
+    <R> R execute(StorageCallback<T, R> callback);
     
     /**
      * 关闭连接
@@ -21,9 +24,9 @@ public interface RedisConnection<T> {
     void close();
     
     /**
-     * 获取原始连接对象
+     * 获取原生Redis连接
      * 
-     * @return 原始连接对象
+     * @return 原生Redis连接
      */
     T getNativeConnection();
 }

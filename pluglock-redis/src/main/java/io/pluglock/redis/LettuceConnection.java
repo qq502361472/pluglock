@@ -1,9 +1,7 @@
 package io.pluglock.redis;
 
-import io.pluglock.core.RedisCallback;
-import io.pluglock.core.RedisConnection;
+import io.pluglock.core.StorageCallback;
 import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
 
 /**
  * Lettuce连接实现
@@ -17,8 +15,8 @@ public class LettuceConnection implements RedisConnection<StatefulRedisConnectio
     }
     
     @Override
-    public <R> R execute(RedisCallback<StatefulRedisConnection<String, String>, R> callback) {
-        return callback.doInRedis(connection);
+    public <R> R execute(StorageCallback<StatefulRedisConnection<String, String>, R> callback) {
+        return callback.doInStorage(connection);
     }
     
     @Override

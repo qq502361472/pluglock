@@ -1,23 +1,21 @@
 package io.pluglock.redis;
 
-import io.pluglock.core.RedisCallback;
-import io.pluglock.core.RedisConnection;
-import redis.clients.jedis.Jedis;
+import io.pluglock.core.StorageCallback;
 
 /**
  * Jedis连接实现
  */
-public class JedisConnection implements RedisConnection<Jedis> {
+public class JedisConnection implements RedisConnection<redis.clients.jedis.Jedis> {
     
-    private final Jedis jedis;
+    private final redis.clients.jedis.Jedis jedis;
     
-    public JedisConnection(Jedis jedis) {
+    public JedisConnection(redis.clients.jedis.Jedis jedis) {
         this.jedis = jedis;
     }
     
     @Override
-    public <R> R execute(RedisCallback<Jedis, R> callback) {
-        return callback.doInRedis(jedis);
+    public <R> R execute(StorageCallback<redis.clients.jedis.Jedis, R> callback) {
+        return callback.doInStorage(jedis);
     }
     
     @Override
@@ -28,7 +26,7 @@ public class JedisConnection implements RedisConnection<Jedis> {
     }
     
     @Override
-    public Jedis getNativeConnection() {
+    public redis.clients.jedis.Jedis getNativeConnection() {
         return jedis;
     }
 }

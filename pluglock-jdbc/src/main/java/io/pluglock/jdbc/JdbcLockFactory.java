@@ -22,9 +22,9 @@ public class JdbcLockFactory implements LockFactory {
         // 根据配置决定锁的类型
         String lockType = config.getProperty("jdbc.lock.type", "basic");
         if ("reentrant".equalsIgnoreCase(lockType)) {
-            return new PJdbcReentrantLock(name, jdbcHelper);
+            return new JdbcPReentrantLock(name, jdbcHelper);
         } else {
-            return new PJdbcLock(name, jdbcHelper);
+            return new JdbcPLock(name, jdbcHelper);
         }
     }
     
