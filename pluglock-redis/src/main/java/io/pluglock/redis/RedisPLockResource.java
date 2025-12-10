@@ -42,8 +42,6 @@ public class RedisPLockResource extends AbstractPLockResource {
     public Long acquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
         RedisConnection<?> connection = connectionFactory.getConnection();
         try {
-            // TODO: 实现具体的获取锁逻辑
-            // 这里需要根据使用的Redis客户端(Jedis/Lettuce)实现具体逻辑
             return doAcquireResource(connection, name, leaseTime, unit, threadId);
         } finally {
             connectionFactory.releaseConnection(connection);
@@ -51,9 +49,56 @@ public class RedisPLockResource extends AbstractPLockResource {
     }
     
     private Long doAcquireResource(RedisConnection<?> connection, String name, long leaseTime, TimeUnit unit, long threadId) {
-        // 具体的获取锁逻辑将在子类中实现
-        // 这里只是一个占位实现
-        return null;
+        // 根据连接类型调用相应的实现
+        if (connection instanceof JedisConnection) {
+            return doAcquireResourceWithJedis((JedisConnection) connection, name, leaseTime, unit, threadId);
+        } else if (connection instanceof LettuceConnection) {
+            return doAcquireResourceWithLettuce((LettuceConnection) connection, name, leaseTime, unit, threadId);
+        } else {
+            throw new UnsupportedOperationException("Unsupported Redis connection type: " + connection.getClass());
+        }
+    }
+    
+    private Long doAcquireResourceWithJedis(JedisConnection connection, String name, long leaseTime, TimeUnit unit, long threadId) {
+        // 使用Jedis实现获取锁的逻辑
+        redis.clients.jedis.Jedis jedis = connection.getNativeConnection();
+        String script = "if (redis.call('exists', KEYS[1]) == 0) then " +
+                "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
+                "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "return redis.call('pttl', KEYS[1]);";
+        
+        long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
+        return ttl == 0 ? null : ttl;
+    }
+    
+    private Long doAcquireResourceWithLettuce(LettuceConnection connection, String name, long leaseTime, TimeUnit unit, long threadId) {
+        // 使用Lettuce实现获取锁的逻辑
+        io.lettuce.core.api.StatefulRedisConnection<String, String> lettuceConnection = connection.getNativeConnection();
+        io.lettuce.core.api.sync.RedisCommands<String, String> commands = lettuceConnection.sync();
+        
+        String script = "if (redis.call('exists', KEYS[1]) == 0) then " +
+                "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
+                "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "return redis.call('pttl', KEYS[1]);";
+        
+        Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
+                           String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
+        Long ttl = (Long) result;
+        return ttl == 0 ? null : ttl;
     }
     
     @Override
@@ -72,7 +117,6 @@ public class RedisPLockResource extends AbstractPLockResource {
     public Long tryAcquireResource(String name, long threadId) {
         RedisConnection<?> connection = connectionFactory.getConnection();
         try {
-            // TODO: 实现尝试获取锁逻辑
             return doTryAcquireResource(connection, name, threadId);
         } finally {
             connectionFactory.releaseConnection(connection);
@@ -80,16 +124,52 @@ public class RedisPLockResource extends AbstractPLockResource {
     }
     
     private Long doTryAcquireResource(RedisConnection<?> connection, String name, long threadId) {
-        // 具体的尝试获取锁逻辑将在子类中实现
-        // 这里只是一个占位实现
-        return 0L;
+        // 根据连接类型调用相应的实现
+        if (connection instanceof JedisConnection) {
+            return doTryAcquireResourceWithJedis((JedisConnection) connection, name, threadId);
+        } else if (connection instanceof LettuceConnection) {
+            return doTryAcquireResourceWithLettuce((LettuceConnection) connection, name, threadId);
+        } else {
+            throw new UnsupportedOperationException("Unsupported Redis connection type: " + connection.getClass());
+        }
+    }
+    
+    private Long doTryAcquireResourceWithJedis(JedisConnection connection, String name, long threadId) {
+        // 使用Jedis实现尝试获取锁的逻辑
+        redis.clients.jedis.Jedis jedis = connection.getNativeConnection();
+        String script = "if (redis.call('exists', KEYS[1]) == 0) then " +
+                "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "return redis.call('pttl', KEYS[1]);";
+        
+        long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(30000), String.valueOf(threadId));
+        return ttl == 0 ? null : ttl;
+    }
+    
+    private Long doTryAcquireResourceWithLettuce(LettuceConnection connection, String name, long threadId) {
+        // 使用Lettuce实现尝试获取锁的逻辑
+        io.lettuce.core.api.StatefulRedisConnection<String, String> lettuceConnection = connection.getNativeConnection();
+        io.lettuce.core.api.sync.RedisCommands<String, String> commands = lettuceConnection.sync();
+        
+        String script = "if (redis.call('exists', KEYS[1]) == 0) then " +
+                "redis.call('hset', KEYS[1], ARGV[2], 1); " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return nil; " +
+                "end; " +
+                "return redis.call('pttl', KEYS[1]);";
+        
+        Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
+                           String.valueOf(30000), String.valueOf(threadId));
+        Long ttl = (Long) result;
+        return ttl == 0 ? null : ttl;
     }
     
     @Override
     public void releaseResource(String name, long threadId) {
         RedisConnection<?> connection = connectionFactory.getConnection();
         try {
-            // TODO: 实现释放锁逻辑
             doReleaseResource(connection, name, threadId);
         } finally {
             connectionFactory.releaseConnection(connection);
@@ -98,7 +178,61 @@ public class RedisPLockResource extends AbstractPLockResource {
     }
     
     private void doReleaseResource(RedisConnection<?> connection, String name, long threadId) {
-        // 具体的释放锁逻辑将在子类中实现
+        // 根据连接类型调用相应的实现
+        if (connection instanceof JedisConnection) {
+            doReleaseResourceWithJedis((JedisConnection) connection, name, threadId);
+        } else if (connection instanceof LettuceConnection) {
+            doReleaseResourceWithLettuce((LettuceConnection) connection, name, threadId);
+        } else {
+            throw new UnsupportedOperationException("Unsupported Redis connection type: " + connection.getClass());
+        }
+    }
+    
+    private void doReleaseResourceWithJedis(JedisConnection connection, String name, long threadId) {
+        // 使用Jedis实现释放锁的逻辑
+        redis.clients.jedis.Jedis jedis = connection.getNativeConnection();
+        String script = "if (redis.call('hexists', KEYS[1], ARGV[2]) == 0) then " +
+                "return nil;" +
+                "end; " +
+                "local counter = redis.call('hincrby', KEYS[1], ARGV[2], -1); " +
+                "if (counter > 0) then " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return 0; " +
+                "else " +
+                "redis.call('del', KEYS[1]); " +
+                "redis.call('publish', KEYS[2], ARGV[3]); " +
+                "return 1; " +
+                "end; " +
+                "return nil;";
+        
+        jedis.eval(script, 2, name, getChannelName(name), String.valueOf(30000), String.valueOf(threadId), "1");
+    }
+    
+    private void doReleaseResourceWithLettuce(LettuceConnection connection, String name, long threadId) {
+        // 使用Lettuce实现释放锁的逻辑
+        io.lettuce.core.api.StatefulRedisConnection<String, String> lettuceConnection = connection.getNativeConnection();
+        io.lettuce.core.api.sync.RedisCommands<String, String> commands = lettuceConnection.sync();
+        
+        String script = "if (redis.call('hexists', KEYS[1], ARGV[2]) == 0) then " +
+                "return nil;" +
+                "end; " +
+                "local counter = redis.call('hincrby', KEYS[1], ARGV[2], -1); " +
+                "if (counter > 0) then " +
+                "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+                "return 0; " +
+                "else " +
+                "redis.call('del', KEYS[1]); " +
+                "redis.call('publish', KEYS[2], ARGV[3]); " +
+                "return 1; " +
+                "end; " +
+                "return nil;";
+        
+        commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name, getChannelName(name)}, 
+                   String.valueOf(30000), String.valueOf(threadId), "1");
+    }
+    
+    private String getChannelName(String lockName) {
+        return "lock:" + lockName + ":channel";
     }
     
     @Override
