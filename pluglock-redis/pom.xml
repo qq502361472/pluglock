@@ -26,18 +26,41 @@
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
         
-        <!-- Jedis dependency for Redis connections -->
+        <!-- Jedis dependency for Redis connections, provided scope -->
         <dependency>
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
             <version>3.7.0</version>
+            <scope>provided</scope>
         </dependency>
         
-        <!-- Lettuce dependency for Redis connections -->
+        <!-- Lettuce dependency for Redis connections, provided scope -->
         <dependency>
             <groupId>io.lettuce</groupId>
             <artifactId>lettuce-core</artifactId>
             <version>6.1.5.RELEASE</version>
+            <scope>provided</scope>
+        </dependency>
+        
+        <!-- Apache Commons Pool2 for connection pooling, compile scope -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+            <version>2.11.1</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>22</source>
+                    <target>22</target>
+                    <compilerArgs>--enable-preview</compilerArgs>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

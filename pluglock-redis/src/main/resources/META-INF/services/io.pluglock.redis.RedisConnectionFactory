@@ -1,2 +1,1 @@
-io.pluglock.redis.spi.JedisConnectionFactoryImpl
-io.pluglock.redis.spi.LettuceConnectionFactoryImpl
+io.pluglock.redis.DynamicRedisConnectionFactory

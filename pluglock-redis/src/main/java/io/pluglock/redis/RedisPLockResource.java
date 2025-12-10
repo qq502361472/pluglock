@@ -35,16 +35,28 @@ public class RedisPLockResource extends AbstractPLockResource {
             return factory;
         }
         
-        throw new IllegalStateException("No RedisConnectionFactory implementation found via SPI");
+        // 如果SPI加载失败，使用默认的动态连接工厂
+        logger.warn("No RedisConnectionFactory found via SPI, using DynamicRedisConnectionFactory as fallback");
+        return new DynamicRedisConnectionFactory();
     }
     
     @Override
     public Long acquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
-        RedisConnection<?> connection = connectionFactory.getConnection();
+        RedisConnection<?> connection = null;
         try {
+            connection = connectionFactory.getConnection();
             return doAcquireResource(connection, name, leaseTime, unit, threadId);
+        } catch (Exception e) {
+            logger.error("Failed to acquire Redis lock: {}", name, e);
+            throw new RuntimeException("Failed to acquire Redis lock", e);
         } finally {
-            connectionFactory.releaseConnection(connection);
+            if (connection != null) {
+                try {
+                    connectionFactory.releaseConnection(connection);
+                } catch (Exception e) {
+                    logger.warn("Failed to release Redis connection", e);
+                }
+            }
         }
     }
     
@@ -74,8 +86,13 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return redis.call('pttl', KEYS[1]);";
         
-        long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
-        return ttl == 0 ? null : ttl;
+        try {
+            long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
+            return ttl == 0 ? null : ttl;
+        } catch (Exception e) {
+            logger.error("Failed to acquire lock with Jedis: {}", name, e);
+            throw new RuntimeException("Failed to acquire lock with Jedis", e);
+        }
     }
     
     private Long doAcquireResourceWithLettuce(LettuceConnection connection, String name, long leaseTime, TimeUnit unit, long threadId) {
@@ -95,10 +112,15 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return redis.call('pttl', KEYS[1]);";
         
-        Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
-                           String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
-        Long ttl = (Long) result;
-        return ttl == 0 ? null : ttl;
+        try {
+            Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
+                               String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
+            Long ttl = (Long) result;
+            return ttl == 0 ? null : ttl;
+        } catch (Exception e) {
+            logger.error("Failed to acquire lock with Lettuce: {}", name, e);
+            throw new RuntimeException("Failed to acquire lock with Lettuce", e);
+        }
     }
     
     @Override
@@ -115,11 +137,21 @@ public class RedisPLockResource extends AbstractPLockResource {
     
     @Override
     public Long tryAcquireResource(String name, long threadId) {
-        RedisConnection<?> connection = connectionFactory.getConnection();
+        RedisConnection<?> connection = null;
         try {
+            connection = connectionFactory.getConnection();
             return doTryAcquireResource(connection, name, threadId);
+        } catch (Exception e) {
+            logger.error("Failed to try acquire Redis lock: {}", name, e);
+            throw new RuntimeException("Failed to try acquire Redis lock", e);
         } finally {
-            connectionFactory.releaseConnection(connection);
+            if (connection != null) {
+                try {
+                    connectionFactory.releaseConnection(connection);
+                } catch (Exception e) {
+                    logger.warn("Failed to release Redis connection", e);
+                }
+            }
         }
     }
     
@@ -144,8 +176,13 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return redis.call('pttl', KEYS[1]);";
         
-        long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(30000), String.valueOf(threadId));
-        return ttl == 0 ? null : ttl;
+        try {
+            long ttl = (Long) jedis.eval(script, 1, name, String.valueOf(30000), String.valueOf(threadId));
+            return ttl == 0 ? null : ttl;
+        } catch (Exception e) {
+            logger.error("Failed to try acquire lock with Jedis: {}", name, e);
+            throw new RuntimeException("Failed to try acquire lock with Jedis", e);
+        }
     }
     
     private Long doTryAcquireResourceWithLettuce(LettuceConnection connection, String name, long threadId) {
@@ -160,19 +197,34 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return redis.call('pttl', KEYS[1]);";
         
-        Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
-                           String.valueOf(30000), String.valueOf(threadId));
-        Long ttl = (Long) result;
-        return ttl == 0 ? null : ttl;
+        try {
+            Object result = commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name}, 
+                               String.valueOf(30000), String.valueOf(threadId));
+            Long ttl = (Long) result;
+            return ttl == 0 ? null : ttl;
+        } catch (Exception e) {
+            logger.error("Failed to try acquire lock with Lettuce: {}", name, e);
+            throw new RuntimeException("Failed to try acquire lock with Lettuce", e);
+        }
     }
     
     @Override
     public void releaseResource(String name, long threadId) {
-        RedisConnection<?> connection = connectionFactory.getConnection();
+        RedisConnection<?> connection = null;
         try {
+            connection = connectionFactory.getConnection();
             doReleaseResource(connection, name, threadId);
+        } catch (Exception e) {
+            logger.error("Failed to release Redis lock: {}", name, e);
+            throw new RuntimeException("Failed to release Redis lock", e);
         } finally {
-            connectionFactory.releaseConnection(connection);
+            if (connection != null) {
+                try {
+                    connectionFactory.releaseConnection(connection);
+                } catch (Exception e) {
+                    logger.warn("Failed to release Redis connection", e);
+                }
+            }
         }
         super.releaseResource(name, threadId);
     }
@@ -205,7 +257,12 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return nil;";
         
-        jedis.eval(script, 2, name, getChannelName(name), String.valueOf(30000), String.valueOf(threadId), "1");
+        try {
+            jedis.eval(script, 2, name, getChannelName(name), String.valueOf(30000), String.valueOf(threadId), "1");
+        } catch (Exception e) {
+            logger.error("Failed to release lock with Jedis: {}", name, e);
+            throw new RuntimeException("Failed to release lock with Jedis", e);
+        }
     }
     
     private void doReleaseResourceWithLettuce(LettuceConnection connection, String name, long threadId) {
@@ -227,8 +284,13 @@ public class RedisPLockResource extends AbstractPLockResource {
                 "end; " +
                 "return nil;";
         
-        commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name, getChannelName(name)}, 
-                   String.valueOf(30000), String.valueOf(threadId), "1");
+        try {
+            commands.eval(script, io.lettuce.core.ScriptOutputType.INTEGER, new String[]{name, getChannelName(name)}, 
+                       String.valueOf(30000), String.valueOf(threadId), "1");
+        } catch (Exception e) {
+            logger.error("Failed to release lock with Lettuce: {}", name, e);
+            throw new RuntimeException("Failed to release lock with Lettuce", e);
+        }
     }
     
     private String getChannelName(String lockName) {

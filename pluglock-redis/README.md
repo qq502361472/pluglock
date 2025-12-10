@@ -5,7 +5,8 @@ Redis module for PlugLock distributed locking framework.
 ## Features
 
 - Support for both Jedis and Lettuce Redis clients
-- SPI-based client selection mechanism
+- Dynamic client selection mechanism based on classpath detection
+- Connection pooling for improved performance
 - Reentrant distributed locks
 - Automatic lock expiration handling
 
@@ -21,7 +22,7 @@ Redis module for PlugLock distributed locking framework.
 </dependency>
 ```
 
-### Selecting Redis Client via SPI
+### Selecting Redis Client via Classpath
 
 PlugLock Redis supports both Jedis and Lettuce clients. To select which one to use, include only one of the following dependencies in your project:
 
@@ -45,7 +46,19 @@ PlugLock Redis supports both Jedis and Lettuce clients. To select which one to u
 </dependency>
 ```
 
-The framework automatically detects which client is available on the classpath and uses it accordingly.
+The framework automatically detects which client is available on the classpath and uses it accordingly. If both clients are present, Jedis takes precedence.
+
+### Connection Pooling
+
+Both Jedis and Lettuce implementations use connection pooling for optimal performance:
+
+- Jedis: Built-in JedisPool
+- Lettuce: Apache Commons Pool2 integration
+
+Connection pool configuration:
+- Max total connections: 20
+- Max idle connections: 10
+- Min idle connections: 2
 
 ### Configuration
 
@@ -53,9 +66,14 @@ TODO: Add configuration examples
 
 ## Implementation Details
 
-The Redis module implements the core `PLockResource` interface and provides two specific implementations:
+The Redis module implements the core `PLockResource` interface and provides a dynamic implementation that automatically selects the appropriate Redis client based on what's available in the classpath.
 
-1. `JedisPLockResource` - Based on Jedis client
-2. `LettucePLockResource` - Based on Lettuce client
+The implementation hierarchy:
+1. `RedisPLockResource` - Main lock resource implementation
+2. `DynamicRedisConnectionFactory` - Automatically selects between Jedis and Lettuce
+3. `JedisConnectionFactoryImpl` - Jedis-specific connection factory
+4. `LettuceConnectionFactoryImpl` - Lettuce-specific connection factory
 
-The appropriate implementation is loaded via Java SPI mechanism at runtime.
+Dependencies:
+- Both Jedis and Lettuce dependencies are marked as `provided` scope in pluglock-redis
+- Apache Commons Pool2 is included with `compile` scope for connection pooling support
