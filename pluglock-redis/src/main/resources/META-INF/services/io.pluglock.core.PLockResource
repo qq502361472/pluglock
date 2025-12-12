@@ -1,1 +1,2 @@
-io.pluglock.redis.RedisPLockResource
+io.pluglock.redis.JedisPLockResource
+io.pluglock.redis.LettucePLockResource

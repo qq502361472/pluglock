@@ -21,17 +21,16 @@ public class LettuceConnectionFactoryImpl implements RedisConnectionFactory {
     private final GenericObjectPool<StatefulRedisConnection<String, String>> connectionPool;
     
     public LettuceConnectionFactoryImpl() {
+        this("localhost", 6379);
+    }
+    
+    public LettuceConnectionFactoryImpl(String host, int port) {
         // 检查Lettuce类是否存在
         try {
             Class.forName("io.lettuce.core.RedisClient");
         } catch (ClassNotFoundException e) {
             throw new IllegalStateException("Lettuce library not found in classpath", e);
         }
-        
-        this("localhost", 6379);
-    }
-    
-    public LettuceConnectionFactoryImpl(String host, int port) {
         // 检查Lettuce类是否存在
         try {
             Class.forName("io.lettuce.core.RedisClient");

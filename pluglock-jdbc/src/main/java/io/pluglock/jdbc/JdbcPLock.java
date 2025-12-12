@@ -2,6 +2,7 @@ package io.pluglock.jdbc;
 
 import io.pluglock.core.AbstractPLock;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 
 /**
@@ -25,8 +26,47 @@ public class JdbcPLock extends AbstractPLock {
     }
     
     @Override
+    public void lock() {
+        // 简单实现，不断尝试获取锁直到成功
+        while (!tryLock()) {
+            try {
+                Thread.sleep(100); // 等待100毫秒后重试
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    
+    @Override
+    public void lock(long leaseTime, TimeUnit unit) throws InterruptedException {
+        // 对于JDBC锁，我们忽略租约时间，直接使用lock()
+        lock();
+    }
+    
+    @Override
+    public void lockInterruptibly() throws InterruptedException {
+        // 简单实现，不断尝试获取锁直到成功或被中断
+        while (!tryLock()) {
+            Thread.sleep(100); // 等待100毫秒后重试
+        }
+    }
+    
+    @Override
     public boolean tryLock() {
         return jdbcHelper.tryAcquireLock(lockName, lockValue, expireTimeSeconds);
+    }
+    
+    @Override
+    public boolean tryLock(long time, TimeUnit unit) throws InterruptedException {
+        long endTime = System.currentTimeMillis() + unit.toMillis(time);
+        while (System.currentTimeMillis() < endTime) {
+            if (tryLock()) {
+                return true;
+            }
+            Thread.sleep(100); // 等待100毫秒后重试
+        }
+        return false;
     }
     
     @Override
