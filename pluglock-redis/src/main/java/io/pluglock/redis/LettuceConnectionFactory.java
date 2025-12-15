@@ -10,8 +10,12 @@ public class LettuceConnectionFactory implements RedisConnectionFactory {
     
     private final RedisClient redisClient;
     private final String redisUri;
+    private final String host;
+    private final int port;
     
     public LettuceConnectionFactory(String host, int port) {
+        this.host = host;
+        this.port = port;
         this.redisUri = "redis://" + host + ":" + port;
         this.redisClient = RedisClient.create(this.redisUri);
     }
@@ -38,5 +42,13 @@ public class LettuceConnectionFactory implements RedisConnectionFactory {
     @Override
     public String getName() {
         return "lettuce";
+    }
+    
+    public String getHost() {
+        return host;
+    }
+    
+    public int getPort() {
+        return port;
     }
 }

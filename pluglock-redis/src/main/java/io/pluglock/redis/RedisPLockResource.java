@@ -2,10 +2,15 @@ package io.pluglock.redis;
 
 import io.pluglock.core.AbstractPLockResource;
 import io.pluglock.core.PLockEntry;
+import io.pluglock.redis.command.RedisCommandExecutor;
+import io.pluglock.redis.spi.ConnectionFactoryLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ServiceLoader;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -14,7 +19,10 @@ import java.util.concurrent.TimeUnit;
 public abstract class RedisPLockResource extends AbstractPLockResource {
     private static final Logger logger = LoggerFactory.getLogger(RedisPLockResource.class);
     
-    protected final RedisConnectionFactory connectionFactory;
+    protected final RedisCommandExecutor commandExecutor;
+    
+    // 存储锁条目映射
+    protected final Map<String, PLockEntry> lockEntries = new ConcurrentHashMap<>();
     
     // 定义获取锁的Lua脚本
     protected static final String ACQUIRE_SCRIPT = 
@@ -37,6 +45,11 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
         "redis.call('pexpire', KEYS[1], ARGV[1]); " +
         "return nil; " +
         "end; " +
+        "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
+        "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
+        "redis.call('pexpire', KEYS[1], ARGV[1]); " +
+        "return nil; " +
+        "end; " +
         "return redis.call('pttl', KEYS[1]);";
         
     // 定义释放锁的Lua脚本
@@ -56,168 +69,126 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
         "return nil;";
 
     public RedisPLockResource() {
-        this.connectionFactory = loadConnectionFactory();
+        this.commandExecutor = createCommandExecutor(ConnectionFactoryLoader.loadConnectionFactory());
     }
     
     public RedisPLockResource(RedisConnectionFactory connectionFactory) {
-        this.connectionFactory = connectionFactory;
+        this.commandExecutor = createCommandExecutor(connectionFactory);
     }
     
     /**
-     * 通过SPI加载连接工厂
-     * @return Redis连接工厂
+     * 创建命令执行器
+     * 
+     * @param connectionFactory 连接工厂
+     * @return 命令执行器
      */
-    private RedisConnectionFactory loadConnectionFactory() {
-        ServiceLoader<RedisConnectionFactory> loader = ServiceLoader.load(RedisConnectionFactory.class);
-        for (RedisConnectionFactory factory : loader) {
-            logger.info("Loaded Redis connection factory: {}", factory.getName());
-            return factory;
-        }
-        
-        // 如果SPI加载失败，使用默认的动态连接工厂
-        logger.warn("No RedisConnectionFactory found via SPI, using DynamicRedisConnectionFactory as fallback");
-        return new DynamicRedisConnectionFactory();
-    }
+    protected abstract RedisCommandExecutor createCommandExecutor(RedisConnectionFactory connectionFactory);
     
     @Override
     public Long acquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
-        RedisConnection<?> connection = null;
         try {
-            connection = connectionFactory.getConnection();
-            return doAcquireResource(connection, name, leaseTime, unit, threadId);
+            return doAcquireResource(name, leaseTime, unit, threadId);
         } catch (Exception e) {
             logger.error("Failed to acquire Redis lock: {}", name, e);
             throw new RuntimeException("Failed to acquire Redis lock", e);
-        } finally {
-            if (connection != null) {
-                try {
-                    connectionFactory.releaseConnection(connection);
-                } catch (Exception e) {
-                    logger.warn("Failed to release Redis connection", e);
-                }
-            }
         }
     }
     
-    private Long doAcquireResource(RedisConnection<?> connection, String name, long leaseTime, TimeUnit unit, long threadId) {
-        return executeAcquireScript(connection, name, leaseTime, unit, threadId);
-    }
-    
-    protected Long executeAcquireScript(RedisConnection<?> connection, String name, long leaseTime, TimeUnit unit, long threadId) {
-        String script = ACQUIRE_SCRIPT;
-        long expireTime = unit.toMillis(leaseTime);
-        String threadIdentifier = String.valueOf(threadId);
-        
-        return executeScript(connection, script, new String[]{name}, 
-                           String.valueOf(expireTime), threadIdentifier);
+    private Long doAcquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
+        return (Long) commandExecutor.executeEval(ACQUIRE_SCRIPT, new String[]{name}, 
+                           String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
     }
     
     @Override
     public PLockEntry subscribe(String name) {
-        // TODO: 实现订阅逻辑
-        return super.subscribe(name);
+        PLockEntry entry = new PLockEntry();
+        lockEntries.put(name, entry);
+        
+        // 启动异步订阅任务
+        CompletableFuture.runAsync(() -> {
+            try {
+                doSubscribe(name);
+            } catch (Exception e) {
+                logger.error("Failed to subscribe to lock release notifications for: {}", name, e);
+            }
+        });
+        
+        return entry;
     }
+    
+    /**
+     * 执行订阅操作
+     * 
+     * @param name 锁名称
+     */
+    protected abstract void doSubscribe(String name);
     
     @Override
     public void unsubscribe(String name) {
-        // TODO: 实现取消订阅逻辑
-        super.unsubscribe(name);
+        lockEntries.remove(name);
+        doUnsubscribe(name);
     }
     
-    @Override
+    /**
+     * 执行取消订阅操作
+     * 
+     * @param name 锁名称
+     */
+    protected abstract void doUnsubscribe(String name);
+    
     public Long tryAcquireResource(String name, long threadId) {
-        RedisConnection<?> connection = null;
         try {
-            connection = connectionFactory.getConnection();
-            return doTryAcquireResource(connection, name, threadId);
+            return doTryAcquireResource(name, threadId);
         } catch (Exception e) {
             logger.error("Failed to try acquire Redis lock: {}", name, e);
             throw new RuntimeException("Failed to try acquire Redis lock", e);
-        } finally {
-            if (connection != null) {
-                try {
-                    connectionFactory.releaseConnection(connection);
-                } catch (Exception e) {
-                    logger.warn("Failed to release Redis connection", e);
-                }
-            }
         }
     }
     
-    private Long doTryAcquireResource(RedisConnection<?> connection, String name, long threadId) {
-        return executeTryAcquireScript(connection, name, threadId);
-    }
-    
-    protected Long executeTryAcquireScript(RedisConnection<?> connection, String name, long threadId) {
-        String script = TRY_ACQUIRE_SCRIPT;
-        long expireTime = 30000; // 默认30秒
-        String threadIdentifier = String.valueOf(threadId);
-        
-        return executeScript(connection, script, new String[]{name}, 
-                           String.valueOf(expireTime), threadIdentifier);
+    private Long doTryAcquireResource(String name, long threadId) {
+        return (Long) commandExecutor.executeEval(TRY_ACQUIRE_SCRIPT, new String[]{name}, 
+                           String.valueOf(30000), String.valueOf(threadId));
     }
     
     @Override
     public void releaseResource(String name, long threadId) {
-        RedisConnection<?> connection = null;
         try {
-            connection = connectionFactory.getConnection();
-            doReleaseResource(connection, name, threadId);
+            doReleaseResource(name, threadId);
         } catch (Exception e) {
             logger.error("Failed to release Redis lock: {}", name, e);
             throw new RuntimeException("Failed to release Redis lock", e);
-        } finally {
-            if (connection != null) {
-                try {
-                    connectionFactory.releaseConnection(connection);
-                } catch (Exception e) {
-                    logger.warn("Failed to release Redis connection", e);
-                }
-            }
         }
-        super.releaseResource(name, threadId);
     }
     
-    private void doReleaseResource(RedisConnection<?> connection, String name, long threadId) {
-        executeReleaseScript(connection, name, threadId);
-    }
-    
-    protected void executeReleaseScript(RedisConnection<?> connection, String name, long threadId) {
-        String script = RELEASE_SCRIPT;
-        long expireTime = 30000; // 默认30秒
-        String threadIdentifier = String.valueOf(threadId);
+    private void doReleaseResource(String name, long threadId) {
         String channelName = getChannelName(name);
-        
-        executeScript(connection, script, new String[]{name, channelName}, 
-                     String.valueOf(expireTime), threadIdentifier, "1");
+        commandExecutor.executeEval(RELEASE_SCRIPT, new String[]{name, channelName}, 
+                     String.valueOf(30000), String.valueOf(threadId), "1");
     }
     
     private String getChannelName(String lockName) {
         return "lock:" + lockName + ":channel";
     }
     
-    /**
-     * 在指定连接上执行Lua脚本的抽象方法，由具体子类实现
-     * 
-     * @param connection Redis连接
-     * @param script Lua脚本
-     * @param keys 脚本KEYS参数
-     * @param args 脚本ARGV参数
-     * @return 脚本执行结果
-     */
-    protected abstract <T> T executeScript(RedisConnection<?> connection, String script, String[] keys, String... args);
-    
     @Override
-    protected void startWatchDog(String name, long threadId) {
+    protected void startWatchDog(String name, long threadId, long millis, Long ttl) {
         // TODO: 实现看门狗逻辑
         logger.debug("Starting watchdog for lock: {}, threadId: {}", name, threadId);
     }
     
     /**
-     * 获取连接工厂
-     * @return Redis连接工厂
+     * 获取命令执行器
+     * @return Redis命令执行器
      */
-    public RedisConnectionFactory getConnectionFactory() {
-        return connectionFactory;
+    public RedisCommandExecutor getCommandExecutor() {
+        return commandExecutor;
+    }
+    
+    /**
+     * 获取锁条目映射
+     * @return 锁条目映射
+     */
+    public Map<String, PLockEntry> getLockEntries() {
+        return lockEntries;
     }
 }

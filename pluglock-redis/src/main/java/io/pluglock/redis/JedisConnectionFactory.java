@@ -10,12 +10,16 @@ import redis.clients.jedis.JedisPoolConfig;
 public class JedisConnectionFactory implements RedisConnectionFactory {
     
     private JedisPool jedisPool;
+    private final String host;
+    private final int port;
     
     public JedisConnectionFactory(String host, int port) {
         this(new JedisPoolConfig(), host, port, 2000);
     }
     
     public JedisConnectionFactory(JedisPoolConfig poolConfig, String host, int port, int timeout) {
+        this.host = host;
+        this.port = port;
         this.jedisPool = new JedisPool(poolConfig, host, port, timeout);
     }
     
@@ -41,5 +45,13 @@ public class JedisConnectionFactory implements RedisConnectionFactory {
     @Override
     public String getName() {
         return "jedis";
+    }
+    
+    public String getHost() {
+        return host;
+    }
+    
+    public int getPort() {
+        return port;
     }
 }

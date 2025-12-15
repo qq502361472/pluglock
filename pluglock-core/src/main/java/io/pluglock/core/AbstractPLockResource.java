@@ -14,45 +14,22 @@ public abstract class AbstractPLockResource implements PLockResource {
         if (leaseTime == -1) {
             sourceLeaseTime = 30 * 1000;
         }
-        Long ttl = acquireResource(name, sourceLeaseTime, unit, threadId);
+        long leaseMillis = unit.toMillis(sourceLeaseTime);
+        Long ttl = tryAcquireResource(name, threadId, leaseMillis);
         if (ttl == null) {
             if (leaseTime == -1) {
                 // 启动监控狗
-                startWatchDog(name, threadId);
+                startWatchDog(name, threadId, leaseMillis, ttl);
             } else {
                 // 什么也不用做,紧做记录
-                intervalLeaseTime = unit.toMillis(leaseTime);
+                intervalLeaseTime = leaseMillis;
             }
             return ttl;
         }
         return 0L;
     }
 
-    protected abstract void startWatchDog(String name, long threadId);
-
-    @Override
-    public PLockEntry subscribe(String name) {
-        return null;
-    }
-
-    @Override
-    public void unsubscribe(String name) {
-
-    }
-
-    @Override
-    public Long tryAcquireResource(String name, long threadId) {
-        return 0L;
-    }
-
-    @Override
-    public void releaseResource(String name, long threadId) {
-        // 删除hmap中的数据
-        // 发布锁释放消息
-
-        // 清理电子续期狗
-    }
-
+    protected abstract void startWatchDog(String name, long threadId, long leaseMillis, Long ttl);
 
     public long getIntervalLeaseTime() {
         return intervalLeaseTime;

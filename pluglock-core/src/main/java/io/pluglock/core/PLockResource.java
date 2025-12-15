@@ -37,9 +37,10 @@ public interface PLockResource {
      *
      * @param name      锁资源名称
      * @param threadId  线程ID
+     * @param leaseTime 锁资源有效期
      * @return 锁过期时间
      */
-    Long tryAcquireResource(String name, long threadId);
+    Long tryAcquireResource(String name, long threadId, long leaseTime);
 
     /**
      * 释放锁资源

@@ -77,7 +77,8 @@ public abstract class PReentrantLock extends AbstractPLock {
 
     @Override
     public boolean tryLock() {
-        Long ttl = lockResource.tryAcquireResource(getName(), Thread.currentThread().getId());
+        // 修正此处调用，添加缺少的参数
+        Long ttl = lockResource.tryAcquireResource(getName(), Thread.currentThread().getId(), DEFAULT_TIMEOUT_SECONDS * 1000);
         return ttl != null;
     }
 
