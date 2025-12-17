@@ -6,7 +6,7 @@ public abstract class AbstractPLockResource implements PLockResource {
     /**
      * 锁资源持有的自动过期时间
      */
-    private long intervalLeaseTime;
+    private volatile long intervalLeaseTime;
 
     @Override
     public Long acquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
@@ -26,11 +26,6 @@ public abstract class AbstractPLockResource implements PLockResource {
             }
             return ttl;
         }
-        return 0L;
-    }
-
-    @Override
-    public Long tryAcquireResource(String name, long threadId, long leaseTime) {
         return 0L;
     }
 

@@ -10,8 +10,6 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Redis锁资源抽象基类
@@ -23,21 +21,7 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
     
     // 存储锁条目映射
     protected final Map<String, PLockEntry> lockEntries = new ConcurrentHashMap<>();
-    
-    // 定义获取锁的Lua脚本
-    protected static final String ACQUIRE_SCRIPT = 
-        "if (redis.call('exists', KEYS[1]) == 0) then " +
-        "redis.call('hset', KEYS[1], ARGV[2], 1); " +
-        "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-        "return nil; " +
-        "end; " +
-        "if (redis.call('hexists', KEYS[1], ARGV[2]) == 1) then " +
-        "redis.call('hincrby', KEYS[1], ARGV[2], 1); " +
-        "redis.call('pexpire', KEYS[1], ARGV[1]); " +
-        "return nil; " +
-        "end; " +
-        "return redis.call('pttl', KEYS[1]);";
-        
+
     // 定义尝试获取锁的Lua脚本
     protected static final String TRY_ACQUIRE_SCRIPT =
         "if (redis.call('exists', KEYS[1]) == 0) then " +
@@ -85,21 +69,6 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
     protected abstract RedisCommandExecutor createCommandExecutor(RedisConnectionFactory connectionFactory);
     
     @Override
-    public Long acquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
-        try {
-            return doAcquireResource(name, leaseTime, unit, threadId);
-        } catch (Exception e) {
-            logger.error("Failed to acquire Redis lock: {}", name, e);
-            throw new RuntimeException("Failed to acquire Redis lock", e);
-        }
-    }
-    
-    private Long doAcquireResource(String name, long leaseTime, TimeUnit unit, long threadId) {
-        return (Long) commandExecutor.executeEval(ACQUIRE_SCRIPT, new String[]{name}, 
-                           String.valueOf(unit.toMillis(leaseTime)), String.valueOf(threadId));
-    }
-    
-    @Override
     public PLockEntry subscribe(String name) {
         PLockEntry entry = new PLockEntry();
         lockEntries.put(name, entry);
@@ -135,21 +104,13 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
      * @param name 锁名称
      */
     protected abstract void doUnsubscribe(String name);
-    
-    public Long tryAcquireResource(String name, long threadId) {
-        try {
-            return doTryAcquireResource(name, threadId);
-        } catch (Exception e) {
-            logger.error("Failed to try acquire Redis lock: {}", name, e);
-            throw new RuntimeException("Failed to try acquire Redis lock", e);
-        }
+
+    @Override
+    public Long tryAcquireResource(String name, long threadId, long leaseTime) {
+        return (Long) commandExecutor.executeEval(TRY_ACQUIRE_SCRIPT, new String[]{name},
+                String.valueOf(leaseTime), String.valueOf(threadId));
     }
-    
-    private Long doTryAcquireResource(String name, long threadId) {
-        return (Long) commandExecutor.executeEval(TRY_ACQUIRE_SCRIPT, new String[]{name}, 
-                           String.valueOf(30000), String.valueOf(threadId));
-    }
-    
+
     @Override
     public void releaseResource(String name, long threadId) {
         try {
@@ -171,7 +132,17 @@ public abstract class RedisPLockResource extends AbstractPLockResource {
     }
     
     @Override
-    protected void startWatchDog(String name, long threadId, long millis, Long ttl) {
+    protected void startWatchDog(String name, long threadId, long leaseMillis, Long ttl) {
+        long l = leaseMillis / 3 - ttl;
+        if (ttl < leaseMillis/3 ){
+            // 刷新续期时间
+            commandExecutor.executeEval("redis.call('pexpire', KEYS[1], ARGV[1]);", new String[]{name}, String.valueOf(leaseMillis));
+            // 使用时间轮
+            // 阻塞 leaseMillis
+
+        }else{
+            // 使用时轮阻塞  leaseMillis / 3 - ttl 这么长时间
+        }
         // TODO: 实现看门狗逻辑
         logger.debug("Starting watchdog for lock: {}, threadId: {}", name, threadId);
     }
